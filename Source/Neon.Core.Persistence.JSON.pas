@@ -750,7 +750,9 @@ begin
       Result := TJSONObject.Create(TJSONPair.Create('$date',TJSONString.Create(TJSONUtils.DateToJSON(AValue.AsType<TDateTime>, FConfig.UseUTCDate))))
     else
       Result := TJSONString.Create(TJSONUtils.DateToJSON(AValue.AsType<TDateTime>, FConfig.UseUTCDate));
-  end;
+  end
+  else
+    Result := TJSONNull.Create;
 end;
 
 function TNeonSerializerJSON.WriteTime(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
@@ -2065,3 +2067,4 @@ begin
 end;
 
 end.
+
