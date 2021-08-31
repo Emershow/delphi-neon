@@ -1527,6 +1527,7 @@ begin
           Continue;
 
         try
+<<<<<<< HEAD
           if (LNeonMember.TypeKind = tkClass) then
           begin
             LNeonMemberValue := LNeonMember.GetValue.AsObject;
@@ -1541,6 +1542,8 @@ begin
             end;
           end;
 
+=======
+>>>>>>> d37401cf4b06836b8549523e1b7c9ecbf98ad98a
           LMemberValue := ReadDataMember(LParam, LNeonMember.GetValue, True);
           LNeonMember.SetValue(LMemberValue);
         except
