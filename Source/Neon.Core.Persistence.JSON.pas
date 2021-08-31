@@ -23,9 +23,6 @@ unit Neon.Core.Persistence.JSON;
 
 interface
 
-
-
-
 {$I Neon.inc}
 
 uses
@@ -36,8 +33,7 @@ uses
   Neon.Core.Attributes,
   Neon.Core.Persistence,
   Neon.Core.DynamicTypes,
-  Neon.Core.Utils,
-  CodeSiteLogging;
+  Neon.Core.Utils;
 
 type
   /// <summary>
@@ -1102,8 +1098,6 @@ begin
   end
   else
     Result := TJSONString.Create(AValue.AsString);
-
-  codesite.Send(result.ToJSON);
 end;
 
 function TNeonSerializerJSON.WriteVariant(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
@@ -1586,8 +1580,6 @@ begin
     Exit;
 
   LJSONObject := AParam.JSONValue as TJSONObject;
-
-  codesite.send(LJSONObject.tojson);
 
   if (AParam.RttiType.TypeKind = tkClass) or (AParam.RttiType.TypeKind = tkInterface) then
     ReadMembers(AParam.RttiType, LPData, LJSONObject);
