@@ -174,12 +174,12 @@ type
     /// <summary>
     ///   Function to be called by a custom serializer method (ISerializeContext)
     /// </summary>
-    function WriteDataMember(const AValue: TValue): TJSONValue; overload;
+    function WriteDataMember(const AValue: TValue; ACustomProcess: Boolean = True): TJSONValue; overload;
 
     /// <summary>
     ///   This method chooses the right Writer based on the Kind of the AValue parameter
     /// </summary>
-    function WriteDataMember(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue; overload;
+    function WriteDataMember(const AValue: TValue; ACustomProcess: Boolean; ANeonObject: TNeonRttiObject): TJSONValue; overload;
   public
     constructor Create(const AConfig: INeonConfiguration);
 
@@ -318,12 +318,12 @@ type
     /// <summary>
     ///   Function to be called by a custom serializer method (IDeserializeContext)
     /// </summary>
-    function ReadDataMember(AJSONValue: TJSONValue; AType: TRttiType; const AData: TValue): TValue; overload;
+    function ReadDataMember(AJSONValue: TJSONValue; AType: TRttiType; const AData: TValue; ACustomProcess: Boolean = True): TValue; overload;
 
     /// <summary>
     ///   This method chooses the right Reader
     /// </summary>
-    function ReadDataMember(const AParam: TNeonDeserializerParam; const AData: TValue): TValue; overload;
+    function ReadDataMember(const AParam: TNeonDeserializerParam; const AData: TValue; ACustomProcess: Boolean): TValue; overload;
   public
     constructor Create(const AConfig: INeonConfiguration);
 
@@ -594,7 +594,7 @@ begin
     Result := TJSONString.Create(AValue.AsString);
 end;
 
-function TNeonSerializerJSON.WriteDataMember(const AValue: TValue): TJSONValue;
+function TNeonSerializerJSON.WriteDataMember(const AValue: TValue; ACustomProcess: Boolean): TJSONValue;
 var
   LNeonObject: TNeonRttiObject;
   LRttiType: TRttiType;
@@ -604,13 +604,13 @@ begin
   LNeonObject := TNeonRttiObject.Create(LRttiType, FOperation);
   LNeonObject.ParseAttributes;
   try
-    Result := WriteDataMember(AValue, LNeonObject);
+    Result := WriteDataMember(AValue, ACustomProcess, LNeonObject);
   finally
     LNeonObject.Free;
   end;
 end;
 
-function TNeonSerializerJSON.WriteDataMember(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
+function TNeonSerializerJSON.WriteDataMember(const AValue: TValue; ACustomProcess: Boolean; ANeonObject: TNeonRttiObject): TJSONValue;
 var
   LCustomSer: TCustomSerializer;
   LDynamicType: IDynamicType;
@@ -622,11 +622,14 @@ var
 begin
   Result := nil;
 
-  LCustomSer := FConfig.Serializers.GetSerializer(AValue.TypeInfo);
-  if Assigned(LCustomSer) then
+  if ACustomProcess then
   begin
-    Result := LCustomSer.Serialize(AValue, ANeonObject, Self);
-    Exit(Result);
+    LCustomSer := FConfig.Serializers.GetSerializer(AValue.TypeInfo);
+    if Assigned(LCustomSer) then
+    begin
+      Result := LCustomSer.Serialize(AValue, ANeonObject, Self);
+      Exit(Result);
+    end;
   end;
 
   case AValue.Kind of
@@ -832,7 +835,7 @@ begin
       if LNeonMember.Serializable then
       begin
         try
-          LJSONValue := WriteDataMember(LNeonMember.GetValue, LNeonMember);
+          LJSONValue := WriteDataMember(LNeonMember.GetValue, True, LNeonMember);
           if Assigned(LJSONValue) then
           begin
             // if it's unwrapped add childs to the AResult JSON object
@@ -1187,7 +1190,7 @@ begin
   begin
     LParam.JSONValue := LJSONArray.Items[LIndex];
     LItemValue := TRttiUtils.CreateNewValue(LParam.RttiType);
-    LItemValue := ReadDataMember(LParam, Result);
+    LItemValue := ReadDataMember(LParam, Result, True);
     Result.SetArrayElement(LIndex, LItemValue);
   end;
 end;
@@ -1218,7 +1221,7 @@ begin
       LParam.JSONValue := LJSONArray.Items[LIndex];
 
       LItemValue := TRttiUtils.CreateNewValue(LParam.RttiType);
-      LItemValue := ReadDataMember(LParam, LItemValue);
+      LItemValue := ReadDataMember(LParam, LItemValue, True);
 
       Result.SetArrayElement(LIndex, LItemValue);
     end;
@@ -1241,7 +1244,8 @@ begin
   end;
 end;
 
-function TNeonDeserializerJSON.ReadDataMember(AJSONValue: TJSONValue; AType: TRttiType; const AData: TValue): TValue;
+function TNeonDeserializerJSON.ReadDataMember(AJSONValue: TJSONValue;
+    AType: TRttiType; const AData: TValue; ACustomProcess: Boolean): TValue;
 var
   LParam: TNeonDeserializerParam;
 begin
@@ -1250,29 +1254,30 @@ begin
   LParam.NeonObject := TNeonRttiObject.Create(AType, FOperation);
   LParam.NeonObject.ParseAttributes;
   try
-    Result := ReadDataMember(LParam, AData);
+    Result := ReadDataMember(LParam, AData, ACustomProcess);
   finally
     LParam.NeonObject.Free;
   end;
 end;
 
-function TNeonDeserializerJSON.ReadDataMember(const AParam: TNeonDeserializerParam; const AData: TValue): TValue;
+function TNeonDeserializerJSON.ReadDataMember(const AParam: TNeonDeserializerParam;
+  const AData: TValue; ACustomProcess: Boolean): TValue;
 var
   LCustom: TCustomSerializer;
 begin
-  // if there is a custom serializer
-  LCustom := FConfig.Serializers.GetSerializer(AParam.RttiType.Handle);
-
-  if Assigned(LCustom) then
+  if ACustomProcess then
   begin
-    Result := LCustom.Deserialize(AParam.JSONValue, AData, AParam.NeonObject, Self);
-    Exit(Result);
-  end
-  else
-  begin
-    if AParam.JSONValue is TJSONNull then
-      Exit(TValue.Empty);
+    // if there is a custom serializer
+    LCustom := FConfig.Serializers.GetSerializer(AParam.RttiType.Handle);
+    if Assigned(LCustom) then
+    begin
+      Result := LCustom.Deserialize(AParam.JSONValue, AData, AParam.NeonObject, Self);
+      Exit(Result);
+    end;
   end;
+
+  if AParam.JSONValue is TJSONNull then
+    Exit(TValue.Empty);
 
   case AParam.RttiType.TypeKind of
     // Simple types
@@ -1385,7 +1390,7 @@ begin
       LParam.JSONValue := LJSONArray.Items[LIndex];
 
       LItemValue := LList.NewItem;
-      LItemValue := ReadDataMember(LParam, LItemValue);
+      LItemValue := ReadDataMember(LParam, LItemValue, True);
 
       LList.Add(LItemValue);
     end;
@@ -1424,11 +1429,11 @@ begin
         if LParamKey.RttiType.TypeKind = tkClass then
           LMap.KeyFromString(LKey, LEnum.Current.JsonString.Value)
         else
-          LKey := ReadDataMember(LParamKey, LKey);
+          LKey := ReadDataMember(LParamKey, LKey, True);
 
         LValue := LMap.NewValue;
         LParamValue.JSONValue := LEnum.Current.JsonValue;
-        LValue := ReadDataMember(LParamValue, LValue);
+        LValue := ReadDataMember(LParamValue, LValue, True);
 
         LMap.Add(LKey, LValue);
       end;
@@ -1536,7 +1541,7 @@ begin
             end;
           end;
 
-          LMemberValue := ReadDataMember(LParam, LNeonMember.GetValue);
+          LMemberValue := ReadDataMember(LParam, LNeonMember.GetValue, True);
           LNeonMember.SetValue(LMemberValue);
         except
           on E: Exception do
@@ -1677,8 +1682,10 @@ begin
       // AnsiString
       tkLString: Result := TValue.From<UTF8String>(UTF8String(AParam.JSONValue.Value));
 
-      //WideString
-      tkWString: Result := TValue.From<WideString>(AParam.JSONValue.Value);
+    {$IFDEF WINDOWS}
+    //WideString
+    tkWString: Result := TValue.From<WideString>(AParam.JSONValue.Value);
+    {$ENDIF}
 
       //UnicodeString
       tkUString: Result := TValue.From<string>(AParam.JSONValue.Value);
