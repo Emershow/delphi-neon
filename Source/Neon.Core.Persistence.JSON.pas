@@ -23,17 +23,21 @@ unit Neon.Core.Persistence.JSON;
 
 interface
 
+
+
+
 {$I Neon.inc}
 
 uses
   System.SysUtils, System.Classes, System.Rtti, System.SyncObjs,
-  System.TypInfo, System.Generics.Collections, System.JSON,
+  System.TypInfo, System.Generics.Collections, System.JSON, REST.JsonReflect,
 
   Neon.Core.Types,
   Neon.Core.Attributes,
   Neon.Core.Persistence,
   Neon.Core.DynamicTypes,
-  Neon.Core.Utils;
+  Neon.Core.Utils,
+  CodeSiteLogging;
 
 type
   /// <summary>
@@ -80,6 +84,12 @@ type
     ///   Writer for TDate* types
     /// </summary>
     function WriteDate(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
+
+
+    /// <summary>
+    ///   Writer for TTime* types
+    /// </summary>
+    function WriteTime(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
 
     /// <summary>
     ///   Writer for Variant types
@@ -159,6 +169,7 @@ type
     /// </remarks>
     function WriteNullable(const AValue: TValue; ANeonObject: TNeonRttiObject; ANullable: IDynamicNullable): TJSONValue;
     function IsNullable(const AValue: TValue; out ANullable: IDynamicNullable): Boolean;
+
   protected
     /// <summary>
     ///   Function to be called by a custom serializer method (ISerializeContext)
@@ -652,9 +663,11 @@ begin
 
     tkFloat:
     begin
+      if (AValue.TypeInfo = System.TypeInfo(TTime)) then
+        Result := WriteTime(AValue, ANeonObject)
+      else
       if (AValue.TypeInfo = System.TypeInfo(TDateTime)) or
-         (AValue.TypeInfo = System.TypeInfo(TDate)) or
-         (AValue.TypeInfo = System.TypeInfo(TTime)) then
+         (AValue.TypeInfo = System.TypeInfo(TDate)) {or         (AValue.TypeInfo = System.TypeInfo(TTime))} then
         Result := WriteDate(AValue, ANeonObject)
       else
         Result := WriteFloat(AValue, ANeonObject);
@@ -733,7 +746,32 @@ begin
         Exit(nil);
     end;
   end;
-  Result := TJSONString.Create(TJSONUtils.DateToJSON(AValue.AsType<TDateTime>, FConfig.UseUTCDate))
+
+  if (AValue.AsType<TDateTime> <> 0) then
+  begin
+    if FConfig.UseMongoType then
+      Result := TJSONObject.Create(TJSONPair.Create('$date',TJSONString.Create(TJSONUtils.DateToJSON(AValue.AsType<TDateTime>, FConfig.UseUTCDate))))
+    else
+      Result := TJSONString.Create(TJSONUtils.DateToJSON(AValue.AsType<TDateTime>, FConfig.UseUTCDate));
+  end
+  else
+    Result := TJSONNull.Create;
+end;
+
+function TNeonSerializerJSON.WriteTime(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
+begin
+  case ANeonObject.NeonInclude.Value of
+    IncludeIf.NotEmpty, IncludeIf.NotDefault:
+    begin
+      if AValue.AsExtended = 0 then
+        Exit(nil);
+    end;
+  end;
+
+  if (AValue.AsType<TTime> <> 0) then
+    Result := TJSONString.Create(TJSONUtils.TimeToJSON(AValue.AsType<TTime>, FConfig.UseUTCDate))
+  else
+    Result := TJSONNull.Create;
 end;
 
 function TNeonSerializerJSON.WriteEnum(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
@@ -1057,7 +1095,15 @@ begin
     end;
   end;
 
-  Result := TJSONString.Create(AValue.AsString);
+
+  if (ANeonObject.NeonProperty = '_id') then
+  begin
+    Result :=  TJSONObject.Create(TJSONPair.Create('$oid',TJSONString.Create(AValue.AsType<string>)));
+  end
+  else
+    Result := TJSONString.Create(AValue.AsString);
+
+  codesite.Send(result.ToJSON);
 end;
 
 function TNeonSerializerJSON.WriteVariant(const AValue: TValue; ANeonObject: TNeonRttiObject): TJSONValue;
@@ -1404,10 +1450,17 @@ begin
 
   if AParam.RttiType.Handle = System.TypeInfo(TDate) then
     Result := TValue.From<TDate>(TJSONUtils.JSONToDate(AParam.JSONValue.Value, True))
-  else if AParam.RttiType.Handle = System.TypeInfo(TTime) then
+  else
+  if AParam.RttiType.Handle = System.TypeInfo(TTime) then
     Result := TValue.From<TTime>(TJSONUtils.JSONToDate(AParam.JSONValue.Value, True))
-  else if AParam.RttiType.Handle = System.TypeInfo(TDateTime) then
-    Result := TValue.From<TDateTime>(TJSONUtils.JSONToDate(AParam.JSONValue.Value, FConfig.UseUTCDate))
+  else
+  if AParam.RttiType.Handle = System.TypeInfo(TDateTime) then
+  begin
+    if(AParam.JSONValue is TJSONObject) and (TJSONObject(AParam.JSONValue).Pairs[0].JsonString.Value = '$date') then
+      Result := TValue.From<TDateTime>(TJSONUtils.JSONToDate(TJSONObject(AParam.JSONValue).Pairs[0].JsonValue.Value, FConfig.UseUTCDate))
+    else
+      Result := TValue.From<TDateTime>(TJSONUtils.JSONToDate(AParam.JSONValue.Value, FConfig.UseUTCDate))
+  end
   else
   begin
     if AParam.JSONValue is TJSONNumber then
@@ -1450,6 +1503,8 @@ var
   LNeonMember: TNeonRttiMember;
   LMemberValue: TValue;
   LParam: TNeonDeserializerParam;
+  ctx: TRttiContext;
+  LNeonMemberValue: TObject;
 begin
   LMembers := GetNeonMembers(AInstance, AType);
   LMembers.FilterDeserialize;
@@ -1472,6 +1527,21 @@ begin
           Continue;
 
         try
+
+          if (LNeonMember.TypeKind = tkClass) then
+          begin
+            LNeonMemberValue := LNeonMember.GetValue.AsObject;
+            if not Assigned(LNeonMemberValue) and not (LParam.JSONValue is TJSONNull) then
+            begin
+              ctx := TRttiContext.Create;
+              try
+                LNeonMember.SetValue(TJSONUnMarshal.ObjectInstance(ctx,LNeonMember.RttiType.QualifiedName));
+              finally
+                ctx.Free;
+              end;
+            end;
+          end;
+
           LMemberValue := ReadDataMember(LParam, LNeonMember.GetValue, True);
           LNeonMember.SetValue(LMemberValue);
         except
@@ -1517,6 +1587,8 @@ begin
     Exit;
 
   LJSONObject := AParam.JSONValue as TJSONObject;
+
+  codesite.send(LJSONObject.tojson);
 
   if (AParam.RttiType.TypeKind = tkClass) or (AParam.RttiType.TypeKind = tkInterface) then
     ReadMembers(AParam.RttiType, LPData, LJSONObject);
@@ -1600,24 +1672,32 @@ end;
 
 function TNeonDeserializerJSON.ReadString(const AParam: TNeonDeserializerParam): TValue;
 begin
-  case AParam.RttiType.TypeKind of
-    // AnsiString
-    tkLString: Result := TValue.From<UTF8String>(UTF8String(AParam.JSONValue.Value));
+  if(AParam.JSONValue is TJSONObject) then
+  begin
+    if (TJSONObject(AParam.JSONValue).Pairs[0].JsonString.Value = '$oid') then
+      Result := TValue.From<string>(TJSONObject(AParam.JSONValue).Pairs[0].JsonValue.Value)
+  end
+  else
+  begin
+    case AParam.RttiType.TypeKind of
+      // AnsiString
+      tkLString: Result := TValue.From<UTF8String>(UTF8String(AParam.JSONValue.Value));
 
     {$IFDEF WINDOWS}
     //WideString
     tkWString: Result := TValue.From<WideString>(AParam.JSONValue.Value);
     {$ENDIF}
 
-    //UnicodeString
-    tkUString: Result := TValue.From<string>(AParam.JSONValue.Value);
+      //UnicodeString
+      tkUString: Result := TValue.From<string>(AParam.JSONValue.Value);
 
-    //ShortString
-    tkString:  Result := TValue.From<UTF8String>(UTF8String(AParam.JSONValue.Value));
+      //ShortString
+      tkString:  Result := TValue.From<UTF8String>(UTF8String(AParam.JSONValue.Value));
 
-  // Future string types treated as unicode strings
-  else
-    Result := AParam.JSONValue.Value;
+    // Future string types treated as unicode strings
+    else
+      Result := AParam.JSONValue.Value;
+    end;
   end;
 end;
 
@@ -1995,3 +2075,4 @@ begin
 end;
 
 end.
+
