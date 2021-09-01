@@ -1092,7 +1092,7 @@ begin
   end;
 
 
-  if (ANeonObject.NeonProperty = '_id') then
+  if {(}ANeonObject.NeonProperty.StartsWith('_id'){  = '_id')} then
   begin
     Result :=  TJSONObject.Create(TJSONPair.Create('$oid',TJSONString.Create(AValue.AsType<string>)));
   end
