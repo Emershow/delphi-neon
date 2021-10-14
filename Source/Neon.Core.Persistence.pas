@@ -1184,8 +1184,7 @@ end;
 
 { TTypeInfoUtils }
 
-class function TTypeInfoUtils.EnumToString(ATypeInfo: PTypeInfo; AValue: Integer;
-    ANeonObject: TNeonRttiObject): string;
+class function TTypeInfoUtils.EnumToString(ATypeInfo: PTypeInfo; AValue: Integer; ANeonObject: TNeonRttiObject): string;
 var
   LTypeData: PTypeData;
 begin
