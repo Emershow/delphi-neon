@@ -218,7 +218,7 @@ begin
       end;
     end;
   else
-    raise Exception.CreateFmt('Error creating type', [AType.Name]);
+    raise Exception.CreateFmt('Error creating type [%s]', [AType.Name]);
   end;
 end;
 
@@ -251,8 +251,7 @@ begin
   Result := CreateInstance(LType, AValue);
 end;
 
-class function TRttiUtils.CreateInstance(AType: TRttiType;
-  const AValue: string): TObject;
+class function TRttiUtils.CreateInstance(AType: TRttiType; const AValue: string): TObject;
 var
   LMethod: TRttiMethod;
   LMetaClass: TClass;
@@ -361,8 +360,7 @@ begin
   Result := TRttiUtils.IfHasAttribute<T>(AInstance, nil);
 end;
 
-class function TRttiUtils.IfHasAttribute<T>(AInstance: TObject;
-  const ADoSomething: TProc<T>): Boolean;
+class function TRttiUtils.IfHasAttribute<T>(AInstance: TObject; const ADoSomething: TProc<T>): Boolean;
 var
   LContext: TRttiContext;
   LType: TRttiType;
@@ -395,8 +393,7 @@ begin
   Result := HasAttribute<T>(ARttiObj, nil);
 end;
 
-class function TRttiUtils.HasAttribute<T>(ARttiObj: TRttiObject; const
-    ADoSomething: TProc<T>): Boolean;
+class function TRttiUtils.HasAttribute<T>(ARttiObj: TRttiObject; const ADoSomething: TProc<T>): Boolean;
 var
   LAttribute: TCustomAttribute;
 begin
