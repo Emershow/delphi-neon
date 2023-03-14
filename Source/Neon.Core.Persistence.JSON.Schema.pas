@@ -441,9 +441,26 @@ begin
 end;
 
 function TNeonSchemaGenerator.WriteEnum(AType: TRttiType; ANeonObject: TNeonRttiObject): TJSONObject;
+<<<<<<< HEAD
 begin
   Result := TJSONObject.Create
     .AddPair('type', 'string');
+=======
+var
+  LTypeData: PTypeData;
+  LIndex: Integer;
+  LEnumArray: TJSONArray;
+begin
+  LTypeData := GetTypeData(AType.Handle);
+
+  LEnumArray := TJSONArray.Create;
+  for LIndex := LTypeData.MinValue to LTypeData.MaxValue do
+    LEnumArray.Add(TTypeInfoUtils.EnumToString(AType.Handle, LIndex, ANeonObject));
+
+  Result := TJSONObject.Create
+    .AddPair('type', 'string')
+    .AddPair('enum', LEnumArray);
+>>>>>>> 2632aaa886a67f446d0322cd394d1a54aef96dd8
 end;
 
 function TNeonSchemaGenerator.WriteFloat(AType: TRttiType; ANeonObject: TNeonRttiObject): TJSONObject;
