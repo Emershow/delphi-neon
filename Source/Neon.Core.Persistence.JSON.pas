@@ -1092,7 +1092,7 @@ begin
   end;
 
 
-  if {(}ANeonObject.NeonProperty.StartsWith('_id'){  = '_id')} then
+  if ANeonObject.NeonProperty.StartsWith('_id') and FConfig.UseMongoType then
   begin
     Result :=  TJSONObject.Create(TJSONPair.Create('$oid',TJSONString.Create(AValue.AsType<string>)));
   end
@@ -1337,7 +1337,14 @@ begin
     else if AParam.JSONValue is TJSONFalse then
       Result := False
     else
-      raise ENeonException.Create('Invalid JSON value. Boolean expected');
+    begin
+      if (AParam.JSONValue.Value.ToLower = 'true') or (AParam.JSONValue.Value.ToLower = 's') then
+        Result := True
+      else if (AParam.JSONValue.Value.ToLower = 'false') or (AParam.JSONValue.Value.ToLower = 'n') or (AParam.JSONValue.Value.ToLower = '') then
+        Result := False
+      else
+        raise ENeonException.Create('Invalid JSON value. Boolean expected');
+    end;
   end
   else
   begin
@@ -1581,7 +1588,7 @@ begin
 
   LJSONObject := AParam.JSONValue as TJSONObject;
 
-  if (AParam.RttiType.TypeKind = tkClass) or (AParam.RttiType.TypeKind = tkInterface) then
+  if ((AParam.RttiType.TypeKind = tkClass) or (AParam.RttiType.TypeKind = tkInterface)) then
     ReadMembers(AParam.RttiType, LPData, LJSONObject);
 end;
 
